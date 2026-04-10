@@ -1099,10 +1099,19 @@
 <div id="livetest" class="tab-content">
   <div class="card">
     <div class="card-title">⚡ Live Packet Testing</div>
-    <div class="card-subtitle">Upload a document packet PDF and get an instant AI-powered Pass/Fail analysis against the hub's form rules. Requires your Anthropic API key (same key used by the AI Assistant).</div>
+    <div class="card-subtitle">Two modes: <strong>AI Mode</strong> — upload a PDF and get instant AI-powered Pass/Fail analysis (requires Anthropic API key). <strong>Manual Mode</strong> — no API key needed; hub generates the expected forms checklist and you tick off what's present.</div>
   </div>
 
-  <!-- API KEY ENTRY (shown if no key stored) -->
+  <!-- MODE SELECTOR -->
+  <div class="card" style="padding:14px 20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button id="lt_mode_ai" class="btn btn-primary" onclick="ltSetMode('ai')" style="min-width:160px">🤖 AI Analysis Mode</button>
+      <button id="lt_mode_manual" class="btn btn-secondary" onclick="ltSetMode('manual')" style="min-width:160px">☑ Manual Check Mode</button>
+      <span id="lt_mode_label" style="font-size:.8rem;color:#718096;margin-left:4px">Select a mode to begin</span>
+    </div>
+  </div>
+
+  <!-- API KEY ENTRY (shown in AI mode if no key stored) -->
   <div id="lt-key-wrap" class="card" style="display:none;border:2px solid #e2a800;background:#fffdf0">
     <div class="card-title" style="color:#92600a">🔑 Anthropic API Key Required</div>
     <div style="color:#6b4c00;font-size:.85rem;margin-bottom:12px">Enter your Anthropic API key to enable AI-powered packet analysis. Your key is stored in this browser session only — never sent anywhere except the Anthropic API.</div>
@@ -1111,6 +1120,9 @@
       <button class="btn btn-primary" onclick="ltSaveKey()" style="white-space:nowrap">Save Key &amp; Continue</button>
     </div>
     <div id="lt_key_err" style="color:#c0392b;font-size:.8rem;margin-top:8px;display:none">Please enter a valid API key (starts with sk-ant-).</div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f0d080;font-size:.8rem;color:#92600a">
+      Don't have an API key? <a href="#" onclick="ltSetMode('manual');return false" style="color:#1a3a5c;font-weight:600">Switch to Manual Check Mode →</a>
+    </div>
   </div>
 
   <!-- CONFIG -->
@@ -1187,7 +1199,8 @@
     </div>
     <div id="lt_err" style="color:#e53e3e;font-size:.83rem;margin-top:10px;display:none"></div>
     <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="ltRunAnalysis()" id="lt_run_btn">⚡ Run Analysis</button>
+      <button class="btn btn-primary" onclick="ltRunAnalysis()" id="lt_run_btn" style="display:none">⚡ Run AI Analysis</button>
+      <button class="btn btn-primary" onclick="ltRunManual()" id="lt_manual_btn" style="display:none">☑ Generate Checklist</button>
       <button class="btn btn-secondary" onclick="ltReset()">Reset</button>
     </div>
   </div>
@@ -1209,6 +1222,21 @@
       <div style="font-size:.83rem;color:#555;margin-bottom:12px">Review the suggested entry below, then click Push to add it to the M&amp;T Log.</div>
       <div id="lt_log_preview" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:.8rem;font-family:monospace;white-space:pre-wrap;color:#2d3748;margin-bottom:12px"></div>
       <button class="btn btn-success" onclick="ltPushToLog()">Push to M&amp;T Log</button>
+    </div>
+  </div>
+
+  <!-- MANUAL CHECKLIST -->
+  <div id="lt_manual_panel" style="display:none">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">☑ Manual Form Checklist</div>
+        <div style="font-size:.8rem;color:#718096">Tick each form that is <strong>present</strong> in the packet</div>
+      </div>
+      <div id="lt_checklist_body" style="font-size:.85rem"></div>
+      <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-success" onclick="ltSubmitManual()">Submit Manual Check</button>
+        <button class="btn btn-secondary" onclick="ltReset()">Reset</button>
+      </div>
     </div>
   </div>
 
@@ -2003,8 +2031,9 @@ function showTab(id, event) {
   if (id === 'scenarios') { filterScenarios(); }
   if (id === 'mtlog') { renderLogTable(); }
   if (id === 'livetest') {
+    // Hide key wrap on tab open — mode selector drives visibility
     var kw = document.getElementById('lt-key-wrap');
-    if (kw) kw.style.display = (apiKey || getStoredKey()) ? 'none' : 'block';
+    if (kw) kw.style.display = 'none';
   }
 }
 
@@ -2537,9 +2566,151 @@ function ltReset() {
     var el = document.getElementById(id); if (el) el.selectedIndex = 0;
   });
   document.getElementById('lt_err').style.display = 'none';
+  document.getElementById('lt_manual_panel').style.display = 'none';
+  document.getElementById('lt_results').style.display = 'none';
+  document.getElementById('lt_loading').style.display = 'none';
+  // Reset mode UI
+  document.getElementById('lt_mode_ai').className = 'btn btn-primary';
+  document.getElementById('lt_mode_manual').className = 'btn btn-secondary';
+  document.getElementById('lt_mode_label').textContent = 'Select a mode to begin';
+  document.getElementById('lt_run_btn').style.display = 'none';
+  document.getElementById('lt_manual_btn').style.display = 'none';
+  ltMode = '';
 }
 
 function ltUpdateProduct() {}
+
+var ltMode = ''; // 'ai' or 'manual'
+
+function ltSetMode(mode) {
+  ltMode = mode;
+  var isAI = mode === 'ai';
+  document.getElementById('lt_mode_ai').className = isAI ? 'btn btn-primary' : 'btn btn-secondary';
+  document.getElementById('lt_mode_manual').className = isAI ? 'btn btn-secondary' : 'btn btn-primary';
+  document.getElementById('lt_mode_label').textContent = isAI ? 'AI Mode — upload PDF + API key required' : 'Manual Mode — no API key needed';
+
+  // Show/hide upload section (AI needs PDF; manual doesn't)
+  var uploadCard = document.getElementById('lt_dropzone') ? document.getElementById('lt_dropzone').closest('.card') : null;
+  if (uploadCard) uploadCard.style.display = isAI ? 'block' : 'none';
+
+  document.getElementById('lt_run_btn').style.display = isAI ? 'inline-block' : 'none';
+  document.getElementById('lt_manual_btn').style.display = isAI ? 'none' : 'inline-block';
+
+  // Hide manual panel + results when switching
+  document.getElementById('lt_manual_panel').style.display = 'none';
+  document.getElementById('lt_results').style.display = 'none';
+
+  // AI mode: check for key
+  if (isAI) {
+    var kw = document.getElementById('lt-key-wrap');
+    kw.style.display = (apiKey || getStoredKey()) ? 'none' : 'block';
+  } else {
+    document.getElementById('lt-key-wrap').style.display = 'none';
+  }
+}
+
+function ltGetExpectedForms() {
+  var product = document.getElementById('lt_product').value;
+  var state = document.getElementById('lt_state').value.trim() || 'Compact';
+  var packetType = document.getElementById('lt_packet').value;
+  var p = PRODUCTS[product];
+  var allForms = (p ? p.forms : []).concat(SHARED_FORMS);
+  return allForms.filter(function(f) {
+    if (f.status === 'Obsolete') return false;
+    var docMatch = packetType === 'Full' || f.doc.indexOf(packetType) !== -1;
+    if (!docMatch) return false;
+    var stateMatch = f.state === 'All' ||
+      f.state.split(',').map(function(s){return s.trim();}).some(function(s) {
+        return s.toUpperCase() === state.toUpperCase();
+      });
+    return stateMatch;
+  });
+}
+
+function ltRunManual() {
+  var state = document.getElementById('lt_state').value.trim();
+  var errEl = document.getElementById('lt_err');
+  if (!state) {
+    errEl.textContent = 'Please enter the state before generating the checklist.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  var forms = ltGetExpectedForms();
+  if (!forms.length) {
+    errEl.textContent = 'No forms found for this product/state/packet combination. Check your configuration.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var html = '<table style="width:100%;border-collapse:collapse">' +
+    '<thead><tr style="background:#f1f5f9;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">' +
+    '<th style="padding:8px 10px;text-align:left;width:48px">Present?</th>' +
+    '<th style="padding:8px 10px;text-align:left">Form Name</th>' +
+    '<th style="padding:8px 10px;text-align:left;width:160px">Form #</th>' +
+    '<th style="padding:8px 10px;text-align:left;width:100px">Type</th>' +
+    '<th style="padding:8px 10px;text-align:left">Condition</th>' +
+    '</tr></thead><tbody>';
+
+  forms.forEach(function(f, i) {
+    var conditional = f.br ? f.br : '';
+    var rowStyle = i % 2 === 0 ? '' : 'background:#f8fafc';
+    html += '<tr style="' + rowStyle + '">' +
+      '<td style="padding:8px 10px;text-align:center">' +
+        '<input type="checkbox" data-idx="' + i + '" style="width:16px;height:16px;cursor:pointer">' +
+      '</td>' +
+      '<td style="padding:8px 10px;font-size:.83rem;color:#1a3a5c;font-weight:500">' + f.name + '</td>' +
+      '<td style="padding:8px 10px;font-size:.78rem;color:#555;font-family:monospace">' + f.num + '</td>' +
+      '<td style="padding:8px 10px;font-size:.78rem;color:#718096">' + f.type + '</td>' +
+      '<td style="padding:8px 10px;font-size:.76rem;color:' + (conditional ? '#d97706' : '#16a34a') + '">' +
+        (conditional ? '⚠ ' + conditional : '✓ Always present') +
+      '</td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table>';
+  html += '<div style="margin-top:8px;font-size:.78rem;color:#718096">' + forms.length + ' expected forms for this configuration. Check all that are present in the packet.</div>';
+
+  document.getElementById('lt_checklist_body').innerHTML = html;
+  document.getElementById('lt_manual_panel').style.display = 'block';
+  window.scrollTo({ top: document.getElementById('lt_manual_panel').offsetTop - 80, behavior: 'smooth' });
+  // Store forms for submission
+  document.getElementById('lt_manual_panel').dataset.forms = JSON.stringify(forms);
+}
+
+function ltSubmitManual() {
+  var forms = JSON.parse(document.getElementById('lt_manual_panel').dataset.forms || '[]');
+  var checkboxes = document.getElementById('lt_checklist_body').querySelectorAll('input[type=checkbox]');
+  var rows = [];
+  var passCount = 0; var failCount = 0;
+
+  forms.forEach(function(f, i) {
+    var checked = checkboxes[i] && checkboxes[i].checked;
+    var isConditional = !!f.br;
+    var result, icon;
+    if (checked) {
+      result = 'PASS'; icon = '✅';
+      passCount++;
+    } else if (isConditional) {
+      result = 'N/A (conditional)'; icon = '⚠';
+    } else {
+      result = 'FAIL'; icon = '❌';
+      failCount++;
+    }
+    rows.push('| ' + icon + ' ' + result + ' | ' + f.name + ' | ' + f.num + ' | ' + (checked ? 'Present' : (isConditional ? 'Condition not triggered or not applicable' : 'Missing from packet')) + ' |');
+  });
+
+  var overall = failCount > 0 ? 'FAIL' : 'PASS';
+  var text = '## SUMMARY\nOverall: ' + overall + '\nPass: ' + passCount + ' | Fail: ' + failCount + '\n\n' +
+    '## FORM CHECKLIST\n| Result | Form Name | Form Number | Notes |\n|--------|-----------|-------------|-------|\n' +
+    rows.join('\n') + '\n\n' +
+    (failCount > 0 ? '## ISSUES FOUND\n' + failCount + ' expected form(s) not found in packet. Review packet and re-test.\n\n' : '') +
+    '## M&T LOG ENTRY\nResult: ' + overall + '\nNotes: Manual check — ' + passCount + ' present, ' + failCount + ' missing';
+
+  document.getElementById('lt_manual_panel').style.display = 'none';
+  ltShowResults(text);
+}
 
 function ltBuildPrompt() {
   var product = document.getElementById('lt_product').value;
