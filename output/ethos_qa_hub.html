@@ -1102,10 +1102,15 @@
     <div class="card-subtitle">Upload a document packet PDF and get an instant AI-powered Pass/Fail analysis against the hub's form rules. Requires your Anthropic API key (same key used by the AI Assistant).</div>
   </div>
 
-  <!-- API KEY WARNING (shown if no key) -->
-  <div id="lt-key-warn" class="alert alert-warning" style="display:none">
-    <span class="alert-icon">⚠</span>
-    <div>No API key found. Open the <strong>AI Assistant</strong> (bottom-right chat button) and enter your Anthropic API key first, then return here.</div>
+  <!-- API KEY ENTRY (shown if no key stored) -->
+  <div id="lt-key-wrap" class="card" style="display:none;border:2px solid #e2a800;background:#fffdf0">
+    <div class="card-title" style="color:#92600a">🔑 Anthropic API Key Required</div>
+    <div style="color:#6b4c00;font-size:.85rem;margin-bottom:12px">Enter your Anthropic API key to enable AI-powered packet analysis. Your key is stored in this browser session only — never sent anywhere except the Anthropic API.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="password" id="lt_key_input" placeholder="sk-ant-api03-…" style="flex:1;min-width:220px;padding:8px 12px;border:1px solid #d4a017;border-radius:6px;font-size:.85rem;font-family:monospace">
+      <button class="btn btn-primary" onclick="ltSaveKey()" style="white-space:nowrap">Save Key &amp; Continue</button>
+    </div>
+    <div id="lt_key_err" style="color:#c0392b;font-size:.8rem;margin-top:8px;display:none">Please enter a valid API key (starts with sk-ant-).</div>
   </div>
 
   <!-- CONFIG -->
@@ -1997,6 +2002,10 @@ function showTab(id, event) {
   if (id === 'formsRef') renderFormsTable();
   if (id === 'scenarios') { filterScenarios(); }
   if (id === 'mtlog') { renderLogTable(); }
+  if (id === 'livetest') {
+    var kw = document.getElementById('lt-key-wrap');
+    if (kw) kw.style.display = (apiKey || getStoredKey()) ? 'none' : 'block';
+  }
 }
 
 // ===== PRODUCT SELECTION =====
@@ -2593,13 +2602,25 @@ function ltBuildPrompt() {
     'CRITICAL RULE: Field checks are rules, not hardcoded values. Never assert an expected value — verify each field matches the actual funnel response.';
 }
 
+function ltSaveKey() {
+  var k = document.getElementById('lt_key_input').value.trim();
+  if (!k || !k.startsWith('sk-ant-')) {
+    document.getElementById('lt_key_err').style.display = 'block';
+    return;
+  }
+  document.getElementById('lt_key_err').style.display = 'none';
+  saveKey(k);
+  document.getElementById('lt-key-wrap').style.display = 'none';
+  ltRunAnalysis();
+}
+
 function ltRunAnalysis() {
   var key = apiKey || getStoredKey();
-  var warnEl = document.getElementById('lt-key-warn');
+  var keyWrap = document.getElementById('lt-key-wrap');
   var errEl = document.getElementById('lt_err');
 
-  if (!key) { warnEl.style.display = 'flex'; return; }
-  warnEl.style.display = 'none';
+  if (!key) { keyWrap.style.display = 'block'; return; }
+  keyWrap.style.display = 'none';
 
   if (!ltFileData) {
     errEl.textContent = 'Please upload a PDF packet first.';
