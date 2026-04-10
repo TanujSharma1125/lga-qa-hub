@@ -68,14 +68,23 @@ Per SOP Section 5, every test run must produce:
 ```
 /doc-testing-hub/
   CLAUDE.md                    ← this file — loaded automatically
+  /shared/
+    /forms/                    ← canonical location for carrier-agnostic PDFs shared
+    |                             across ALL products (43 files):
+    |                             Authorizations: 22-ETH E-SIGN, HIPAA, FCRA, NOIP, TXT,
+    |                               MIBN, RTA
+    |                             Replacement: 22-ETH RPLC B, 21-ETH RPLC A (state variants),
+    |                               21-ETH RPLC (state variants), 24-ETH RPLC C (state variants)
+    |                             Buyer's Guide: NAIC, ME, NJ
+    glossary.md
+    sop_md.md
   /lga-prime/
-    pcs_lga.csv                ← LGA-relevant rows from Forms sheet of PCS (271 rows)
-    /forms/                    ← individual form PDFs (83 files)
+    pcs_lga.csv                ← LGA-relevant rows from Forms sheet of PCS
+    /forms/                    ← LGA-specific form PDFs (product-specific only)
     /output/
-      lga_qa_hub.html          ← generated QA Hub for LGA Prime
   /[next-product]/             ← add new product folders here
     pcs_[product].csv
-    /forms/
+    /forms/                    ← product-specific PDFs only; shared forms live in /shared/forms/
     /output/
   /shared/
     sop.docx                   ← Compliance SOP (source: Downloads)
@@ -142,11 +151,18 @@ When there is a conflict between sources, resolve in this order:
 
 ## Products currently configured
 
-| Product | Carrier | Type | PCS file | Hub file | Status |
-|---------|---------|------|----------|----------|--------|
-| LGA Prime | Banner Life | 30-yr Term | pcs_lga.csv | lga_qa_hub.html | Active |
+All products are consolidated into a single unified hub: `/doc-testing-hub/output/ethos_qa_hub.html`
 
-Add new products to this table when onboarded.
+| Product | Carrier | Type | Form Control | PCS file | Status |
+|---------|---------|------|--------------|----------|--------|
+| LGA Prime | Banner Life | 30-yr Term | LGA_Reprice_Prime, LGA_Price_Elasticity_Prime | lga-prime/pcs_lga.csv | Active |
+| Ameritas Protection IUL | Ameritas | Universal Life (IUL) | Ethos_IUL_v1 | ameritas-iul/pcs_ameritas_iul.csv | Active |
+| SFG / North American Accumulation IUL | North American | Universal Life (IUL) | IUL_ACCUM_v1 | sfg-iul/pcs_sfg_iul.csv | Active |
+| Banner GIWL (Final Expense) | Banner Life | Guaranteed Issue WL | Banner_FEGI | banner-fegi/pcs_banner_fegi.csv | Active |
+| Banner SIWL (Final Expense) | Banner Life | Simplified Issue WL | Banner_FESI | banner-fesi/pcs_banner_fesi.csv | Active |
+| Ameritas Choice Term | Ameritas | Term Life | Ameritas_Choice_v1 | ameritas-choice/pcs_ameritas_choice.csv | Active |
+
+Add new products to this table when onboarded. Re-export PCS CSV and regenerate `ethos_qa_hub.html` using `/tmp/build_hub.py` + `/tmp/gen_hub.py`.
 
 ---
 
@@ -155,3 +171,4 @@ Add new products to this table when onboarded.
 | Version | Date | Changed by | Summary |
 |---------|------|-----------|---------|
 | v1.0 | 2026-04-02 | Product Documents Team | Initial LGA Prime hub |
+| v2.0 | 2026-04-08 | Product Documents Team | Unified multi-product hub — added Ameritas IUL, SFG IUL, Banner GIWL, Banner SIWL, Ameritas Choice. Single ethos_qa_hub.html with product selector. |
